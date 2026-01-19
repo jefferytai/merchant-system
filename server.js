@@ -10,6 +10,11 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname));
 
+// 根路径路由
+app.get('/', (req, res) => {
+  res.sendFile(__dirname + '/index.html');
+});
+
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-3-pro-preview' });
 
