@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>商户管理系统</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>商户管理系统</h1>
+        
+        <!-- 搜索区域 -->
+        <div class="search-section">
+            <div class="search-inputs">
+                <div class="search-input-wrapper">
+                    <label for="cityInput">城市</label>
+                    <input type="text" id="cityInput" class="search-input" placeholder="例如：上海">
+                </div>
+                <div class="search-input-wrapper">
+                    <label for="categoryInput">商户类型</label>
+                    <input type="text" id="categoryInput" class="search-input" placeholder="例如：精品咖啡馆">
+                </div>
+                <div class="search-input-wrapper">
+                    <label for="searchInput">关键词</label>
+                    <input type="text" id="searchInput" class="search-input" placeholder="可选关键词">
+                </div>
+            </div>
+            
+            <div class="search-mode-section">
+                <label>搜索模式：</label>
+                <div class="mode-options">
+                    <label class="mode-option">
+                        <input type="radio" name="searchMode" value="strict" id="modeStrict">
+                        <span class="mode-icon">🔒</span>
+                        <span class="mode-name">严格验证</span>
+                        <span class="mode-desc">5-15个商户，全部已验证</span>
+                        <span class="mode-quality">★★★★</span>
+                        <span class="mode-status">全部已验证</span>
+                    </label>
+                    <label class="mode-option selected">
+                        <input type="radio" name="searchMode" value="balanced" id="modeBalanced" checked>
+                        <span class="mode-icon">⚖️</span>
+                        <span class="mode-name">平衡模式</span>
+                        <span class="mode-desc">10-30个商户，部分已验证（推荐）</span>
+                        <span class="mode-quality">★★★☆</span>
+                        <span class="mode-status">部分已验证</span>
+                    </label>
+                    <label class="mode-option">
+                        <input type="radio" name="searchMode" value="fast" id="modeFast">
+                        <span class="mode-icon">⚡</span>
+                        <span class="mode-name">快速搜索</span>
+                        <span class="mode-desc">50-100个商户，全部待验证</span>
+                        <span class="mode-quality">★☆☆☆</span>
+                        <span class="mode-status">全部待验证</span>
+                    </label>
+                </div>
+            </div>
+            <div class="search-actions">
+                <button id="searchBtn" class="btn btn-primary">搜索</button>
+                <button id="searchAgainBtn" class="btn btn-primary">再搜索</button>
+                <button id="saveBtn" class="btn btn-success">保存数据</button>
+            </div>
+        </div>
+
+        <!-- 搜索进度 -->
+        <div id="searchProgressContainer" class="progress-container hidden">
+            <div class="progress-label">正在搜索和验证商户数据...</div>
+            <div class="progress-bar">
+                <div id="searchProgressBar" class="progress-fill"></div>
+            </div>
+            <div id="searchProgressText" class="progress-text">0%</div>
+        </div>
+
+        <!-- 结果区域 -->
+        <div id="results" class="results-section hidden">
+            <div class="results-header">
+                <div class="results-count">
+                    已找到 <span id="merchantCount">0</span> 个商户
+                </div>
+                <button id="clearAllBtn" class="btn btn-danger btn-sm">清空所有数据</button>
+            </div>
+            <div id="merchantList" class="merchant-grid"></div>
+        </div>
+
+        <!-- 邮件弹窗 + 遮罩层 -->
+        <div id="emailOverlay" class="email-overlay hidden">
+            <div class="email-modal">
+                <div id="emailProgressContainer" class="progress-container hidden">
+                    <div class="progress-label">正在生成商务邮件...</div>
+                    <div class="progress-bar">
+                        <div id="emailProgressBar" class="progress-fill"></div>
+                    </div>
+                    <div class="progress-info">
+                        <span id="emailProgressText" class="progress-text">0%</span>
+                        <span id="emailProgressTime" class="progress-time">预计 10 秒</span>
+                    </div>
+                </div>
+
+                <h2>邮件预览</h2>
+                <div class="email-preview">
+                    <div class="email-field">
+                        <label>邮件主题</label>
+                        <div class="value" id="emailSubject"></div>
+                    </div>
+                    <div class="email-field">
+                        <label>称呼</label>
+                        <div class="value" id="emailSalutation"></div>
+                    </div>
+                    <div class="email-field">
+                        <label>收件人</label>
+                        <div class="value" id="emailTo"></div>
+                    </div>
+                    <div class="email-field email-body">
+                        <label>邮件正文（可编辑）</label>
+                        <textarea id="emailBody" rows="12"></textarea>
+                    </div>
+                    <div class="email-field">
+                        <label>结尾</label>
+                        <div class="value" id="emailClosing"></div>
+                    </div>
+                    <div class="email-field">
+                        <label>签名</label>
+                        <div class="value" id="emailSignature"></div>
+                    </div>
+                </div>
+                <div class="email-actions">
+                    <button id="closeBtn" class="btn btn-ghost">关闭</button>
+                    <button id="copyBtn" class="btn btn-primary">复制邮件</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
