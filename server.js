@@ -8,7 +8,15 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(__dirname));
+
+// 明确配置静态文件路由
+app.get('/style.css', (req, res) => {
+  res.sendFile(__dirname + '/style.css');
+});
+
+app.get('/script.js', (req, res) => {
+  res.sendFile(__dirname + '/script.js');
+});
 
 // 根路径路由
 app.get('/', (req, res) => {
