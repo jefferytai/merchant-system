@@ -1,30 +1,41 @@
-const cityInput = document.getElementById('cityInput');
-const categoryInput = document.getElementById('categoryInput');
-const searchInput = document.getElementById('searchInput');
-const searchBtn = document.getElementById('searchBtn');
-const searchAgainBtn = document.getElementById('searchAgainBtn');
-const saveBtn = document.getElementById('saveBtn');
-const results = document.getElementById('results');
-const merchantList = document.getElementById('merchantList');
-const merchantCount = document.getElementById('merchantCount');
-const emailSection = document.getElementById('emailOverlay');
-const copyBtn = document.getElementById('copyBtn');
-const closeBtn = document.getElementById('closeBtn');
-const clearAllBtn = document.getElementById('clearAllBtn');
-const searchProgressContainer = document.getElementById('searchProgressContainer');
-const searchProgressBar = document.getElementById('searchProgressBar');
-const searchProgressText = document.getElementById('searchProgressText');
-const emailProgressContainer = document.getElementById('emailProgressContainer');
-const emailProgressBar = document.getElementById('emailProgressBar');
-const emailProgressText = document.getElementById('emailProgressText');
-
 const STORAGE_KEY = 'merchantData';
+const USER_PROFILE_KEY = 'userProfile';
+let userProfile = null;
+
+let cityInput;
+let categoryInput;
+let searchInput;
+let searchBtn;
+let searchAgainBtn;
+let saveBtn;
+let results;
+let merchantList;
+let merchantCount;
+let emailSection;
+let copyBtn;
+let closeBtn;
+let clearAllBtn;
+let searchProgressContainer;
+let searchProgressBar;
+let searchProgressText;
+let emailProgressContainer;
+let emailProgressBar;
+let emailProgressText;
 
 let currentEmail = '';
 let currentMerchantEmail = '';
 let searchProgressInterval = null;
 let emailProgressInterval = null;
 let currentSearchMode = 'balanced';
+
+let userNameInput;
+let userTitleInput;
+let userEmailInput;
+let userPhoneInput;
+let companyNameInput;
+let companyBusinessInput;
+let companyWebsiteInput;
+let companyAddressInput;
 
 function saveMerchantData(data) {
   try {
@@ -107,50 +118,15 @@ function renderLinkedInUrl(url, text) {
   if (!url || url === 'N/A') return 'N/A';
 
   const isValid = isValidLinkedInUrl(url);
-  const warningIcon = isValid ? '' : ' ⚠️';
   const className = isValid ? '' : 'invalid-link';
-  const displayText = text === '查看' ? `查看${warningIcon}` : `${url}${warningIcon}`;
+  const displayText = isValid ? text : `${url} (invalid)`;
 
   const href = url.startsWith('http') ? url : 'https://' + url;
-  return `<a href="${href}" target="_blank" class="${className}" title="${isValid ? '点击访问' : '链接可能无效，请验证'}">${displayText}</a>`;
+
+  return `<a href="${href}" target="_blank">${displayText}</a>`;
 }
 
-searchBtn.addEventListener('click', handleSearch);
-searchAgainBtn.addEventListener('click', handleSearch);
-saveBtn.addEventListener('click', exportToJSON);
-searchInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') handleSearch();
-});
-cityInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') handleSearch();
-});
-categoryInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') handleSearch();
-});
 
-clearAllBtn.addEventListener('click', () => {
-    if (confirm('确定要清空所有数据吗？此操作不可恢复！')) {
-        const data = clearAllMerchants();
-        renderMerchants(data);
-    }
-});
-
-// 搜索模式选择器
-document.querySelectorAll('input[name="searchMode"]').forEach(radio => {
-    radio.addEventListener('change', (e) => {
-        const mode = e.target.value;
-        currentSearchMode = mode;
-        
-        // 更新选中状态的UI
-        document.querySelectorAll('.mode-option').forEach(option => {
-            option.classList.remove('selected');
-        });
-        e.target.closest('.mode-option').classList.add('selected');
-        
-        // 显示模式说明
-        showModeDescription(mode);
-    });
-});
 
 function showModeDescription(mode) {
     let message = '';
@@ -171,6 +147,212 @@ function showModeDescription(mode) {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+    cityInput = document.getElementById('cityInput');
+    categoryInput = document.getElementById('categoryInput');
+    searchInput = document.getElementById('searchInput');
+    searchBtn = document.getElementById('searchBtn');
+    searchAgainBtn = document.getElementById('searchAgainBtn');
+    saveBtn = document.getElementById('saveBtn');
+    results = document.getElementById('results');
+    merchantList = document.getElementById('merchantList');
+    merchantCount = document.getElementById('merchantCount');
+    emailSection = document.getElementById('emailOverlay');
+    copyBtn = document.getElementById('copyBtn');
+    closeBtn = document.getElementById('closeBtn');
+    clearAllBtn = document.getElementById('clearAllBtn');
+    searchProgressContainer = document.getElementById('searchProgressContainer');
+    searchProgressBar = document.getElementById('searchProgressBar');
+    searchProgressText = document.getElementById('searchProgressText');
+    emailProgressContainer = document.getElementById('emailProgressContainer');
+    emailProgressBar = document.getElementById('emailProgressBar');
+    emailProgressText = document.getElementById('emailProgressText');
+
+    // 商户添加弹窗元素
+    const addMerchantBtn = document.getElementById('addMerchantBtn');
+    const addMerchantOverlay = document.getElementById('addMerchantOverlay');
+    const cancelAddMerchantBtn = document.getElementById('cancelAddMerchantBtn');
+    const submitAddMerchantBtn = document.getElementById('submitAddMerchantBtn');
+
+    // 用户资料弹窗元素
+    const myProfileBtn = document.getElementById('myProfileBtn');
+    const profileOverlay = document.getElementById('profileOverlay');
+    const cancelProfileBtn = document.getElementById('cancelProfileBtn');
+    const saveProfileBtn = document.getElementById('saveProfileBtn');
+    userNameInput = document.getElementById('userName');
+    userTitleInput = document.getElementById('userTitle');
+    userEmailInput = document.getElementById('userEmail');
+    userPhoneInput = document.getElementById('userPhone');
+    companyNameInput = document.getElementById('companyName');
+    companyBusinessInput = document.getElementById('companyBusiness');
+    companyWebsiteInput = document.getElementById('companyWebsite');
+    companyAddressInput = document.getElementById('companyAddress');
+
+    // Excel 导入弹窗元素
+    const importExcelBtn = document.getElementById('importExcelBtn');
+    const importExcelOverlay = document.getElementById('importExcelOverlay');
+    const cancelImportBtn = document.getElementById('cancelImportBtn');
+    const importBtn = document.getElementById('importBtn');
+    const excelFileInput = document.getElementById('excelFileInput');
+    const selectFileBtn = document.getElementById('selectFileBtn');
+    const uploadArea = document.getElementById('uploadArea');
+    const fileList = document.getElementById('fileList');
+    const fileListItems = document.getElementById('fileListItems');
+    const clearFileListBtn = document.getElementById('clearFileListBtn');
+    const importProgress = document.getElementById('importProgress');
+    const importProgressBar = document.getElementById('importProgressBar');
+    const importProgressText = document.getElementById('importProgressText');
+
+    searchBtn.addEventListener('click', () => handleSearch(false));
+    searchAgainBtn.addEventListener('click', () => handleSearch(true));
+    saveBtn.addEventListener('click', exportToJSON);
+    searchInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') handleSearch();
+    });
+    cityInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') handleSearch();
+    });
+    categoryInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') handleSearch();
+    });
+
+    clearAllBtn.addEventListener('click', () => {
+        if (confirm('确定要清空所有数据吗？此操作不可恢复！')) {
+            const data = clearAllMerchants();
+            renderMerchants(data);
+        }
+    });
+
+    // 搜索模式选择器
+    document.querySelectorAll('input[name="searchMode"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            const mode = e.target.value;
+            currentSearchMode = mode;
+
+            // 更新选中状态的UI
+            document.querySelectorAll('.mode-option').forEach(option => {
+                option.classList.remove('selected');
+            });
+            e.target.closest('.mode-option').classList.add('selected');
+
+            // 显示模式说明
+            showModeDescription(mode);
+        });
+    });
+
+    // 添加商户按钮
+    addMerchantBtn.addEventListener('click', openAddMerchantModal);
+
+    // 取消添加商户
+    cancelAddMerchantBtn.addEventListener('click', closeAddMerchantModal);
+
+    // 提交添加商户
+    submitAddMerchantBtn.addEventListener('click', handleAddMerchant);
+
+    // 我的资料按钮
+    myProfileBtn.addEventListener('click', openProfileModal);
+
+    // 取消保存资料
+    cancelProfileBtn.addEventListener('click', closeProfileModal);
+
+    // 保存资料
+    saveProfileBtn.addEventListener('click', handleSaveProfile);
+
+    // 导入 Excel 按钮
+    importExcelBtn.addEventListener('click', openImportModal);
+
+    // 取消导入
+    cancelImportBtn.addEventListener('click', closeImportModal);
+
+    // 选择文件按钮
+    selectFileBtn.addEventListener('click', () => {
+        excelFileInput.click();
+    });
+
+    // 文件选择变化
+    excelFileInput.addEventListener('change', handleFileSelect);
+
+    // 拖拽上传
+    uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.classList.add('dragover');
+    });
+
+    uploadArea.addEventListener('dragleave', () => {
+        uploadArea.classList.remove('dragover');
+    });
+
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+        const files = Array.from(e.dataTransfer.files).filter(file =>
+            file.name.match(/\.(xlsx|xls)$/)
+        );
+        if (files.length > 0) {
+            handleFiles(files);
+        }
+    });
+
+    // 清空文件列表
+    clearFileListBtn.addEventListener('click', clearFileList);
+
+    // 开始导入
+    importBtn.addEventListener('click', handleImport);
+
+    // 点击遮罩层关闭商户添加弹窗
+    addMerchantOverlay.addEventListener('click', (e) => {
+        if (e.target === e.currentTarget) {
+            closeAddMerchantModal();
+        }
+    });
+
+    // 点击遮罩层关闭资料弹窗
+    profileOverlay.addEventListener('click', (e) => {
+        if (e.target === e.currentTarget) {
+            closeProfileModal();
+        }
+    });
+
+    // 统一ESC键监听器（优先级：资料 > 添加商户 > 邮件）
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            if (!profileOverlay.classList.contains('hidden')) {
+                closeProfileModal();
+            } else if (!addMerchantOverlay.classList.contains('hidden')) {
+                closeAddMerchantModal();
+            } else if (!emailOverlay.classList.contains('hidden')) {
+                closeEmailModal();
+            }
+        }
+    });
+
+    // 点击遮罩层关闭邮件弹窗
+    document.getElementById('emailOverlay').addEventListener('click', (e) => {
+        if (e.target === e.currentTarget) {
+            closeEmailModal();
+        }
+    });
+
+    // 邮件正文输入更新
+    document.getElementById('emailBody').addEventListener('input', updateCurrentEmail);
+
+    // 复制邮件按钮
+    copyBtn.addEventListener('click', () => {
+        updateCurrentEmail();
+        if (currentEmail) {
+            navigator.clipboard.writeText(currentEmail).then(() => {
+                alert('邮件已复制到剪贴板');
+            }).catch(() => {
+                alert('复制失败，请手动复制');
+            });
+        }
+    });
+
+    // 关闭邮件弹窗按钮
+    closeBtn.addEventListener('click', closeEmailModal);
+
+    // 加载用户资料
+    userProfile = loadUserProfile();
+
     const data = loadMerchantData();
     if (data.length > 0) {
         renderMerchants(data);
@@ -236,7 +418,7 @@ function stopEmailProgress() {
     }, 500);
 }
 
-async function handleSearch() {
+async function handleSearch(forceGemini = false) {
     const city = cityInput.value.trim();
     const category = categoryInput.value.trim();
     const keyword = searchInput.value.trim();
@@ -254,8 +436,10 @@ async function handleSearch() {
     try {
         const response = await fetch('/api/search', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ city, category, keyword, mode })
+            headers: {
+                'Content-Type': 'application/json; charset=UTF-8'
+            },
+            body: JSON.stringify({ city, category, keyword, mode, forceGemini })
         });
 
         const data = await response.json();
@@ -266,7 +450,15 @@ async function handleSearch() {
             const { data: allData, added } = addMerchants(data.merchants);
             renderMerchants(allData);
             results.classList.remove('hidden');
-            alert(`搜索完成！新增 ${added} 个商户`);
+
+            // 根据数据来源显示不同的提示
+            if (data.source === 'md') {
+                alert(`搜索完成！从数据库找到 ${data.merchants.length} 个商户`);
+            } else if (data.source === 'gemini') {
+                alert(`AI搜索完成！新增 ${added} 个商户`);
+            } else {
+                alert(`搜索完成！新增 ${added} 个商户`);
+            }
         } else {
             merchantList.innerHTML = `
                 <div class="no-results">
@@ -300,16 +492,24 @@ function renderMerchants(merchants) {
     merchantList.innerHTML = merchants.map((merchant, index) => {
         const contacted = merchant['已联系'] || false;
         const verificationStatus = merchant['验证状态'] || '全部待验证';
+        const source = merchant['来源'] || 'AI搜索';
         const officialLink = merchant['官方链接'] || 'N/A';
         const founderLinkedin = merchant['创始人 LinkedIn'] || 'N/A';
         const companyLinkedin = merchant['公司 LinkedIn'] || 'N/A';
+        const hidden = merchant['hidden'] || false;
 
-        const statusBadge = contacted 
+        const statusBadge = contacted
             ? '<span class="status-badge status-contacted">✓</span>'
             : '<span class="status-badge status-uncontacted">○</span>';
 
         const verificationBadge = (() => {
-            if (verificationStatus === '已验证') {
+            if (source === 'Excel数据') {
+                return '<span class="verification-badge verification-badge-excel" title="Excel数据">📊 Excel数据</span>';
+            } else if (source === 'AI搜索') {
+                return '<span class="verification-badge verification-badge-ai" title="AI搜索">🤖 AI搜索</span>';
+            } else if (source === '自填写') {
+                return '<span class="verification-badge verification-badge-self-added" title="自填写">📝 自填写</span>';
+            } else if (verificationStatus === '已验证') {
                 return '<span class="verification-badge verification-verified" title="已验证">✓ 已验证</span>';
             } else if (verificationStatus === '部分已验证') {
                 return '<span class="verification-badge verification-partial" title="部分已验证">⚠️ 部分已验证</span>';
@@ -322,11 +522,39 @@ function renderMerchants(merchants) {
             ? `<a href="${officialLink.startsWith('http') ? officialLink : 'https://' + officialLink}" target="_blank">访问官网</a>`
             : 'N/A';
 
+        // 如果商户被隐藏，只显示基本信息
+        if (hidden) {
+            return `
+                <div class="merchant-card hidden" data-index="${index}">
+                    <div class="card-header">
+                        <div class="card-header-left">
+                            <button class="status-badge ${contacted ? 'status-contacted' : 'status-uncontacted'}"
+                                    onclick="toggleMerchantContacted(${index})"
+                                    title="${contacted ? '已联系' : '未联系'}">
+                                ${contacted ? '✓' : '○'}
+                            </button>
+                            <div class="merchant-name">${merchant['商户名称'] || 'N/A'} (已隐藏)</div>
+                            ${verificationBadge}
+                        </div>
+                        <div class="card-actions">
+                            <button class="action-icon-btn" onclick="toggleMerchantHidden(${index})" title="显示详情">
+                                👁️
+                            </button>
+                            <button class="action-icon-btn" onclick="deleteMerchantRow(${index})" title="删除商户">
+                                🗑️
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 显示完整信息
         return `
             <div class="merchant-card" data-index="${index}">
                 <div class="card-header">
                     <div class="card-header-left">
-                        <button class="status-badge ${contacted ? 'status-contacted' : 'status-uncontacted'}" 
+                        <button class="status-badge ${contacted ? 'status-contacted' : 'status-uncontacted'}"
                                 onclick="toggleMerchantContacted(${index})"
                                 title="${contacted ? '已联系' : '未联系'}">
                             ${contacted ? '✓' : '○'}
@@ -337,6 +565,9 @@ function renderMerchants(merchants) {
                     <div class="card-actions">
                         <button class="action-icon-btn" onclick="generateEmail(${index})" title="生成邮件">
                             ✉️
+                        </button>
+                        <button class="action-icon-btn" onclick="toggleMerchantHidden(${index})" title="隐藏商户">
+                            👁️
                         </button>
                         <button class="action-icon-btn" onclick="deleteMerchantRow(${index})" title="删除商户">
                             🗑️
@@ -403,6 +634,13 @@ window.toggleMerchantContacted = function(index) {
     renderMerchants(data);
 }
 
+window.toggleMerchantHidden = function(index) {
+    const data = loadMerchantData();
+    data[index].hidden = !data[index].hidden;
+    saveMerchantData(data);
+    renderMerchants(data);
+}
+
 window.deleteMerchantRow = function(index) {
     if (confirm('确定要删除这个商户吗？')) {
         const data = deleteMerchant(index);
@@ -429,6 +667,10 @@ window.toggleDetails = function(button) {
 }
 
 async function generateEmail(index) {
+    if (!(await checkUserProfile())) {
+        return;
+    }
+
     const merchant = window.merchantData[index];
 
     if (!merchant) return;
@@ -495,7 +737,7 @@ async function generateEmail(index) {
         const response = await fetch('/api/generate-email', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ merchant })
+            body: JSON.stringify({ merchant, userProfile })
         });
 
         const data = await response.json();
@@ -552,23 +794,6 @@ function closeEmailModal() {
     setTimeout(() => overlay.classList.add('hidden'), 250);
 }
 
-// 点击遮罩层关闭
-document.getElementById('emailOverlay').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) {
-        closeEmailModal();
-    }
-});
-
-// ESC 键关闭
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-        const overlay = document.getElementById('emailOverlay');
-        if (!overlay.classList.contains('hidden')) {
-            closeEmailModal();
-        }
-    }
-});
-
 function updateCurrentEmail() {
     const subject = document.getElementById('emailSubject').textContent || '';
     const salutation = document.getElementById('emailSalutation').textContent || '';
@@ -579,17 +804,413 @@ function updateCurrentEmail() {
     currentEmail = `主题：${subject}\n\n称呼：${salutation}\n收件人：${currentMerchantEmail}\n\n正文：\n${body}\n\n结尾：${closing}\n签名：${signature}`;
 }
 
-document.getElementById('emailBody').addEventListener('input', updateCurrentEmail);
+// 商户添加相关函数
+function openAddMerchantModal() {
+    const overlay = document.getElementById('addMerchantOverlay');
+    overlay.classList.remove('hidden');
+    setTimeout(() => overlay.classList.add('visible'), 10);
 
-copyBtn.addEventListener('click', () => {
-    updateCurrentEmail();
-    if (currentEmail) {
-        navigator.clipboard.writeText(currentEmail).then(() => {
-            alert('邮件已复制到剪贴板');
-        }).catch(() => {
-            alert('复制失败，请手动复制');
-        });
+    // 清空表单
+    document.getElementById('merchantName').value = '';
+    document.getElementById('merchantAddress').value = '';
+    document.getElementById('merchantPhone').value = '';
+    document.getElementById('merchantEmail').value = '';
+    document.getElementById('merchantWebsite').value = '';
+    document.getElementById('merchantFounder').value = '';
+    document.getElementById('merchantHighlights').value = '';
+    document.getElementById('merchantFounderLinkedin').value = '';
+    document.getElementById('merchantCompanyLinkedin').value = '';
+}
+
+function closeAddMerchantModal() {
+    const overlay = document.getElementById('addMerchantOverlay');
+    overlay.classList.remove('visible');
+    setTimeout(() => overlay.classList.add('hidden'), 250);
+}
+
+function validateMerchantForm() {
+    const name = document.getElementById('merchantName').value.trim();
+    const address = document.getElementById('merchantAddress').value.trim();
+    const email = document.getElementById('merchantEmail').value.trim();
+
+    if (!name) {
+        alert('请输入商户名称');
+        return false;
     }
-});
 
-closeBtn.addEventListener('click', closeEmailModal);
+    if (!address) {
+        alert('请输入验证地址');
+        return false;
+    }
+
+    if (!email) {
+        alert('请输入电子邮箱');
+        return false;
+    }
+
+    if (!validateEmail(email)) {
+        alert('请输入有效的电子邮箱地址');
+        return false;
+    }
+
+    return true;
+}
+
+function validateEmail(email) {
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return re.test(email);
+}
+
+function createMerchantObject() {
+    return {
+        '商户名称': document.getElementById('merchantName').value.trim(),
+        '验证地址': document.getElementById('merchantAddress').value.trim(),
+        '联系电话': document.getElementById('merchantPhone').value.trim() || 'N/A',
+        '电子邮箱': document.getElementById('merchantEmail').value.trim(),
+        '官方链接': document.getElementById('merchantWebsite').value.trim() || 'N/A',
+        '创始人': document.getElementById('merchantFounder').value.trim() || 'N/A',
+        '业务亮点': document.getElementById('merchantHighlights').value.trim() || 'N/A',
+        '创始人 LinkedIn': document.getElementById('merchantFounderLinkedin').value.trim() || 'N/A',
+        '公司 LinkedIn': document.getElementById('merchantCompanyLinkedin').value.trim() || 'N/A',
+        '已联系': false,
+        '创建时间': new Date().toISOString(),
+        '来源': '自填写',
+        '验证状态': '自填写'
+    };
+}
+
+function handleAddMerchant() {
+    if (!validateMerchantForm()) {
+        return;
+    }
+
+    const newMerchant = createMerchantObject();
+    const { data: allData, added } = addMerchants([newMerchant]);
+
+    if (added > 0) {
+        renderMerchants(allData);
+        closeAddMerchantModal();
+        alert('商户添加成功！');
+    } else {
+        alert('该商户已存在，无需重复添加');
+    }
+}
+
+// 用户资料管理函数
+function loadUserProfile() {
+    // 先尝试从 localStorage 加载（兼容旧版本）
+    const localData = localStorage.getItem(USER_PROFILE_KEY);
+    if (localData) {
+        return JSON.parse(localData);
+    }
+
+    // 如果 localStorage 没有，尝试从后端加载
+    return fetch('/api/get-profile')
+        .then(response => response.json())
+        .then(data => {
+            if (data.profile) {
+                // 同时保存到 localStorage
+                localStorage.setItem(USER_PROFILE_KEY, JSON.stringify(data.profile));
+                return data.profile;
+            }
+            return null;
+        })
+        .catch(error => {
+            console.error('从后端加载用户资料失败:', error);
+            return null;
+        });
+}
+
+function saveUserProfile(profile) {
+    userProfile = profile;
+    localStorage.setItem(USER_PROFILE_KEY, JSON.stringify(profile));
+}
+ 
+async function openProfileModal() {
+    const profile = await loadUserProfile();
+
+    if (profile) {
+        userNameInput.value = profile['姓名'] || '';
+        userTitleInput.value = profile['职位'] || '';
+        userEmailInput.value = profile['邮箱'] || '';
+        userPhoneInput.value = profile['电话'] || '';
+        companyNameInput.value = profile['公司名称'] || '';
+        companyBusinessInput.value = profile['公司业务'] || '';
+        companyWebsiteInput.value = profile['公司网址'] || '';
+        companyAddressInput.value = profile['公司地址'] || '';
+    }
+
+    profileOverlay.classList.remove('hidden');
+    setTimeout(() => profileOverlay.classList.add('visible'), 10);
+}
+
+function closeProfileModal() {
+    profileOverlay.classList.remove('visible');
+    setTimeout(() => profileOverlay.classList.add('hidden'), 250);
+}
+
+function validateProfileForm() {
+    const name = userNameInput.value.trim();
+    const title = userTitleInput.value.trim();
+    const email = userEmailInput.value.trim();
+    const company = companyNameInput.value.trim();
+
+    if (!name) {
+        alert('请输入您的姓名');
+        return false;
+    }
+
+    if (!title) {
+        alert('请输入您的职位');
+        return false;
+    }
+
+    if (!email) {
+        alert('请输入您的邮箱');
+        return false;
+    }
+
+    if (!validateEmail(email)) {
+        alert('请输入有效的邮箱地址');
+        return false;
+    }
+
+    if (!company) {
+        alert('请输入公司名称');
+        return false;
+    }
+
+    return true;
+}
+
+function handleSaveProfile() {
+    console.log('=== handleSaveProfile 开始执行 ===');
+    
+    // 检查DOM元素是否存在
+    if (!userNameInput) {
+        console.error('userNameInput 为 null');
+        alert('系统错误：无法找到输入框');
+        return;
+    }
+    
+    console.log('DOM元素检查通过');
+    console.log('姓名:', userNameInput.value);
+    console.log('职位:', userTitleInput.value);
+    console.log('邮箱:', userEmailInput.value);
+    console.log('公司:', companyNameInput.value);
+    
+    if (!validateProfileForm()) {
+        console.log('表单验证失败');
+        return;
+    }
+    
+    console.log('表单验证通过，开始构建profile对象');
+    
+    const profile = {
+        '姓名': userNameInput.value.trim(),
+        '职位': userTitleInput.value.trim(),
+        '邮箱': userEmailInput.value.trim(),
+        '电话': userPhoneInput.value.trim() || 'N/A',
+        '公司名称': companyNameInput.value.trim(),
+        '公司业务': companyBusinessInput.value.trim() || 'N/A',
+        '公司网址': companyWebsiteInput.value.trim() || 'N/A',
+        '公司地址': companyAddressInput.value.trim() || 'N/A',
+        '更新时间': new Date().toISOString()
+    };
+    
+    console.log('构建的profile对象:', profile);
+    
+    try {
+        console.log('开始保存到localStorage...');
+        saveUserProfile(profile);
+        console.log('保存成功！');
+
+        // 同时保存到后端
+        console.log('开始保存到后端...');
+        fetch('/api/save-profile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(profile)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                console.log('后端保存成功！');
+            } else {
+                console.error('后端保存失败:', data.error);
+            }
+        })
+        .catch(error => {
+            console.error('后端保存错误:', error);
+        });
+
+        // 验证保存
+        const saved = localStorage.getItem(USER_PROFILE_KEY);
+        console.log('验证保存的数据:', saved);
+
+        closeProfileModal();
+        console.log('弹窗已关闭');
+        alert('资料保存成功！');
+        console.log('=== handleSaveProfile 执行完成 ===');
+    } catch (error) {
+        console.error('保存失败:', error);
+        alert('保存失败：' + error.message);
+    }
+}
+
+async function checkUserProfile() {
+    console.log('=== checkUserProfile 开始 ===');
+    userProfile = await loadUserProfile();
+    console.log('加载的userProfile:', userProfile);
+
+    if (!userProfile) {
+        console.log('userProfile为空，使用降级方案（允许生成邮件）');
+        // 不再阻止邮件生成，使用空userProfile对象
+        userProfile = {
+            '姓名': '',
+            '职位': '',
+            '邮箱': '',
+            '电话': 'N/A',
+            '公司名称': '',
+            '公司业务': '',
+            '公司网址': 'N/A',
+            '公司地址': 'N/A',
+            '更新时间': new Date().toISOString()
+        };
+        console.log('使用空userProfile对象，可以生成邮件');
+    }
+
+    console.log('checkUserProfile 完成，userProfile已设置');
+    return true;
+}
+
+// Excel 导入相关函数
+let selectedFiles = [];
+
+function openImportModal() {
+    importExcelOverlay.classList.remove('hidden');
+    setTimeout(() => importExcelOverlay.classList.add('visible'), 10);
+    clearFileList();
+}
+
+function closeImportModal() {
+    importExcelOverlay.classList.remove('visible');
+    setTimeout(() => importExcelOverlay.classList.add('hidden'), 250);
+    clearFileList();
+}
+
+function handleFileSelect(e) {
+    const files = Array.from(e.target.files);
+    handleFiles(files);
+}
+
+function handleFiles(files) {
+    selectedFiles = [...selectedFiles, ...files];
+    renderFileList();
+
+    // 更新导入按钮状态
+    importBtn.disabled = selectedFiles.length === 0;
+}
+
+function renderFileList() {
+    if (selectedFiles.length === 0) {
+        fileList.classList.add('hidden');
+        uploadArea.classList.remove('hidden');
+        return;
+    }
+
+    fileList.classList.remove('hidden');
+    uploadArea.classList.add('hidden');
+
+    fileListItems.innerHTML = selectedFiles.map((file, index) => `
+        <div class="file-item">
+            <div class="file-info">
+                <span class="file-icon">📊</span>
+                <span class="file-name">${file.name}</span>
+                <span class="file-size">${(file.size / 1024).toFixed(2)} KB</span>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="removeFile(${index})">✕</button>
+        </div>
+    `).join('');
+}
+
+window.removeFile = function(index) {
+    selectedFiles.splice(index, 1);
+    renderFileList();
+    importBtn.disabled = selectedFiles.length === 0;
+}
+
+function clearFileList() {
+    selectedFiles = [];
+    excelFileInput.value = '';
+    renderFileList();
+    importBtn.disabled = true;
+    importProgress.classList.add('hidden');
+}
+
+async function handleImport() {
+    if (selectedFiles.length === 0) {
+        alert('请先选择要导入的 Excel 文件');
+        return;
+    }
+
+    importBtn.disabled = true;
+    cancelImportBtn.disabled = true;
+    importProgress.classList.remove('hidden');
+
+    let totalMerchants = [];
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
+        const progress = Math.round(((i + 1) / selectedFiles.length) * 100);
+        importProgressBar.style.width = progress + '%';
+        importProgressText.textContent = `正在导入 ${i + 1}/${selectedFiles.length}: ${file.name}`;
+
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const response = await fetch('/api/import-excel', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                totalMerchants = [...totalMerchants, ...data.merchants];
+                successCount += data.count;
+            } else {
+                failCount++;
+                console.error(`导入失败: ${file.name}`, data.error);
+            }
+        } catch (error) {
+            failCount++;
+            console.error(`导入错误: ${file.name}`, error);
+        }
+    }
+
+    importProgressBar.style.width = '100%';
+    importProgressText.textContent = '导入完成！';
+
+    // 合并到现有数据
+    if (totalMerchants.length > 0) {
+        const { data: allData, added } = addMerchants(totalMerchants);
+        renderMerchants(allData);
+        results.classList.remove('hidden');
+
+        setTimeout(() => {
+            alert(`导入完成！\n\n成功导入 ${successCount} 个文件\n新增 ${added} 个商户\n失败 ${failCount} 个文件`);
+            closeImportModal();
+        }, 500);
+    } else {
+        setTimeout(() => {
+            alert('导入失败，请检查文件格式');
+            importBtn.disabled = false;
+            cancelImportBtn.disabled = false;
+        }, 500);
+    }
+}
+

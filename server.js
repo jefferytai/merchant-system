@@ -2,12 +2,36 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const fs = require('fs');
+const path = require('path');
+const MDLoader = require('./md-loader');
+const LinkedInSearch = require('./linkedin-search');
+const prompts = require('./prompts/linkedin-prompt');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+
+const mdLoader = new MDLoader({
+  mdDir: path.join(__dirname, 'merchant-md'),
+  cacheFile: path.join(__dirname, 'data', 'md-cache.json')
+});
+
+let mdData = null;
+
+mdLoader.loadAll().then(data => {
+  mdData = data;
+  console.log('========================================');
+  console.log('MD data loaded');
+  console.log(`Total merchants: ${data.merchantCount}`);
+  console.log(`Cities: ${data.cityCount}`);
+  console.log('========================================');
+}).catch(err => {
+  console.error('MD data load error:', err.message);
+  mdData = null;
+});
 
 // 明确配置静态文件路由
 app.get('/style.css', (req, res) => {
@@ -26,277 +50,249 @@ app.get('/', (req, res) => {
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-3-pro-preview' });
 
+// Initialize LinkedIn search module
+const linkedinSearch = new LinkedInSearch({
+  serperApiKey: process.env.SERPER_API_KEY
+});
+
 app.post('/api/search', async (req, res) => {
   try {
-    const { city, category, keyword, mode = 'balanced' } = req.body;
-    
+    const { city, category, keyword, mode = 'balanced', forceGemini = false } = req.body;
+
+    console.log('Search request:', { city, category, mode, forceGemini });
+
     if (!city && !category && !keyword) {
-      return res.status(400).json({ error: '请输入城市、商户类型或关键词' });
+      return res.status(400).json({ error: 'Please enter city, merchant type, or keyword' });
     }
 
-    let searchPrompt = '';
+    const startTime = Date.now();
 
-    if (mode === 'strict') {
-      searchPrompt = `# Role
-你是一位拥有严谨数据验证能力的专业市场研究员。你的核心能力是结合你的内部知识库与实时网络搜索（RAG），提供经过双重验证的商业数据。
+    // Gemini API 搜索（"再搜索"按钮）
+    if (forceGemini && model) {
+      console.log('Starting Gemini API search');
 
-# Goal
-搜索并整理 ${city || '[城市名称]'} 的 ${category || '[商户类别]'} 数据。你不仅需要寻找数据，更重要的是必须对每一条数据进行严格的真实性和有效性验证。
+      try {
+        const geminiPrompt = `Search merchant information:
 
-# Context & Constraints
-用户需要一份可以直接投入使用的高质量列表，任何过时、虚假或链接失效的信息都是不可接受的。
+City: ${city || '不限'}
+Merchant Type: ${category || '不限'}
+Keyword: ${keyword || '无'}
 
-# Workflow (必须严格执行以下步骤)
+Return a JSON array of merchants (maximum 10) with these fields:
+- 商户名称
+- 验证地址
+- 联系电话
+- 电子邮箱
+- 官方链接
+- 创始人
+- 业务亮点
+- LinkedIn URL (LinkedIn公司页面地址，if available)
+- 创始人 LinkedIn (创始人LinkedIn URL)
+- 验证状态: "AI生成"
+- 来源: "AI搜索"
 
-## 第1步：广泛检索 (Broad Retrieval)
-结合你的预训练数据和通过搜索引擎进行广泛搜索，列出该城市该类别的潜在商户名单。
+For each merchant, try to:
+1. Find official website
+2. Identify if there is a LinkedIn company page (official company LinkedIn)
+3. Identify the founder or key executives
+4. Include their LinkedIn profile if publicly available
+5. Verify contact information if possible
 
-## 第2步：真实性验证 (Authenticity Verification)
-对第1步中的每一个潜在商户进行联网核查。
-- **检查状态**：确认商户是否显示为"营业中"。剔除"已关闭"或"暂停营业"的商户。
-- **交叉验证**：寻找至少两个来源（如官方网站、Google地图评论、或本地黄页）佐证其存在。
-
-## 第3步：链接与连通性测试 (Link Connectivity Check)
-- **浏览测试**：利用你的工具访问商户的官方链接。
-- **有效性判断**：如果你无法成功访问该页面，或者页面返回404错误，必须将该链接标记为无效，并尝试寻找替代的有效链接。如果找不到有效链接，请在最终输出中剔除该商户或明确标注"无官网"。
-
-## 第4步：LinkedIn 链接验证 (LinkedIn Link Verification)
-- **访问测试**：尝试访问创始人和公司的 LinkedIn 页面。
-- **有效性判断**：
-  - 如果页面显示 "Page Not Available"、"404 Not Found"、"Profile Not Found"、"Company Not Found" 或其他错误，必须将该 LinkedIn 链接标记为 "N/A"。
-  - 如果 LinkedIn 个人资料或公司页面已关闭或不存在，不要提供过时的链接。
-  - 只提供经过验证可以正常访问的 LinkedIn 链接。
-  - **优先级**：宁可不提供 LinkedIn 链接，也不要提供失效的链接。
-
-## 第5步：最终输出 (Final Output)
-仅输出经过第2步和第3步和第4步验证成功的商户。请使用以下JSON格式数组，不要使用Markdown表格：
-
+Return the results in this exact JSON format:
 [
   {
-    "商户名称": "名称",
-    "验证地址": "地址",
-    "官方链接": "URL（已验证）或 N/A",
-    "联系电话": "电话或 N/A",
-    "业务亮点": "描述",
-    "创始人": "创始人或 N/A",
-    "创始人 LinkedIn": "LinkedIn URL（N/A）",
-    "公司 LinkedIn": "LinkedIn URL（N/A）",
-    "电子邮箱": "邮箱（N/A）",
-    "已联系": false
+    "商户名称": "company name",
+    "验证地址": "address",
+    "联系电话": "phone",
+    "电子邮箱": "email",
+    "官方链接": "website",
+    "创始人": "founder name",
+    "业务亮点": "business description",
+    "创始人 LinkedIn": "founder LinkedIn URL or N/A",
+    "公司 LinkedIn": "company LinkedIn URL or N/A",
+    "验证状态": "AI生成",
+    "来源": "AI搜索"
   }
-]
+]`;
 
-# Safety & Accuracy
-- 如果你不确定某个信息的真实性，请不要将其包含在内。
-- 宁可数据量少但准确，也不要提供未经验证的大量数据。
-- 搜索结束时，请说明你排除了多少个无效或无法验证的条目。
+        const result = await model.generateContent(geminiPrompt);
+        const responseText = result.response.text();
 
-# Start Task
-目标城市：${city || '请指定城市'}
-目标商户类别：${category || '请指定商户类别'}
-${keyword ? `附加关键词：${keyword}` : ''}
+        const duration = ((Date.now() - startTime) / 1000).toFixed(3);
+        console.log(`Gemini search completed, took ${duration}s`);
 
-开始执行检索与验证流程。`;
-      
-    } else if (mode === 'balanced') {
-      searchPrompt = `# Role
-你是一位拥有严谨数据验证能力的专业市场研究员。你的核心能力是结合你的内部知识库与实时网络搜索（RAG），提供经过双重验证的商业数据。
+        let geminiMerchants = [];
+        try {
+          // 尝试解析 JSON
+          const jsonMatch = responseText.match(/\[[\s]*\{[\s\S]*?\}\s*\]/);
+          if (jsonMatch) {
+            const jsonText = jsonMatch[0];
+            geminiMerchants = JSON.parse(jsonText);
+          }
+        } catch (e) {
+          console.log('Failed to parse JSON from response, will use raw response');
+        }
 
-# Goal
-搜索并整理 ${city || '[城市名称]'} 的 ${category || '[商户类别]'} 数据。你不仅需要寻找数据，更重要的是必须对每一条数据进行严格的真实性和有效性验证。
+        if (geminiMerchants && geminiMerchants.length > 0) {
+          console.log(`Parsed ${geminiMerchants.length} merchants from Gemini`);
 
-# Context & Constraints
-用户需要一份可以直接投入使用的高质量列表，任何过时、虚假或链接失效的信息都是不可接受的。
+          // 增强 LinkedIn 信息
+          const enhancedMerchants = await enhanceWithLinkedIn(geminiMerchants);
 
-# Workflow (平衡模式)
+          const duration = ((Date.now() - startTime) / 1000).toFixed(3);
+          console.log(`LinkedIn enhancement completed, total time: ${duration}s`);
 
-## 第1步：广泛检索 (Broad Retrieval)
-结合你的预训练数据和通过搜索引擎进行广泛搜索，列出该城市该类别的潜在商户名单。
+          return res.json({
+            merchants: enhancedMerchants,
+            source: 'gemini',
+            geminiRawResponse: responseText,
+            geminiUsed: true,
+            linkedinEnhanced: true,
+            duration: `${duration}s`,
+            message: `Found ${enhancedMerchants.length} merchants from Gemini API (with LinkedIn enhancement)`
+          });
+        }
 
-## 第2步：基础验证 (Basic Verification)
-- **必须验证**：商户名称、验证地址、联系电话、电子邮箱
-- **验证要求**：这些信息必须存在且格式正确
-- **排除标准**：名称为空、地址为空、电话为空、邮箱为空的商户
-
-## 第3步：官网标注 (Link Annotation)
-- **访问测试**：尝试访问商户的官方链接
-- **标注规则**：
-  - 如果成功访问：标记为 "官方网站（已验证）"
-  - 如果无法访问：标记为 "官方网站（待验证）"
-  - **重要**：不要因为官网未验证就剔除商户，保留商户并标注状态
-
-## 第4步：LinkedIn 标注 (LinkedIn Annotation)
-- **访问测试**：尝试访问创始人和公司的 LinkedIn 页面
-- **标注规则**：
-  - 如果成功访问：提供 LinkedIn 链接，标记为 "（已验证）"
-  - 如果无法访问：标记为 "（待验证）" 或 "N/A"
-  - **优先级**：优先显示已验证的 LinkedIn，未验证的标记为"待验证"而不是"N/A"
-
-## 第5步：最终输出
-- 输出格式：JSON 数组
-- 预期数量：10-30 个商户
-- 验证状态：字段标注（已验证/待验证）
-
-[
-  {
-    "商户名称": "名称",
-    "验证地址": "地址",
-    "官方链接": "URL（已验证）" 或 "URL（待验证）" 或 "无官网"
-  }
-  ...
-]
-
-# Safety & Accuracy
-- 如果你不确定某个信息的真实性，请不要将其包含在内。
-- 在质量和数量之间找到平衡，对于不确定的信息标注"待验证"
-- 搜索结束时，请说明你找到了多少个商户，以及标注为"已验证"和"待验证"的商户数量。
-
-# Start Task
-目标城市：${city || '请指定城市'}
-目标商户类别：${category || '请指定商户类别'}
-${keyword ? `附加关键词：${keyword}` : ''}
-
-开始执行基础检索和标注流程。`;
-      
-    } else if (mode === 'fast') {
-      searchPrompt = `# Role
-你是一位拥有严谨数据验证能力的专业市场研究员。你的核心能力是结合你的内部知识库与实时网络搜索（RAG），提供经过双重验证的商业数据。
-
-# Goal
-搜索并整理 ${city || '[城市名称]'} 的 ${category || '[商户类别]'} 数据。你不仅需要寻找数据，更重要的是必须对每一条数据进行严格的真实性和有效性验证。
-
-# Context & Constraints
-用户需要一份可以直接投入使用的高质量列表，任何过时、虚假或链接失效的信息都是不可接受的。
-
-# Workflow (快速搜索模式)
-
-## 第1步：广泛检索 (Broad Retrieval)
-结合你的预训练数据和通过搜索引擎进行广泛搜索，列出该城市该类别的潜在商户名单。
-
-## 第2步：基础信息收集 (Basic Info Collection)
-- 收集商户名称、验证地址、联系电话、电子邮箱
-- **不进行任何验证**：只要有基本信息的商户都保留
-
-## 第3步：标注所有待验证
-- 所有字段标注为"待验证"
-- 官网链接：标注为"官方网站（待验证）"
-- LinkedIn：标注为"LinkedIn（待验证）"或 "N/A"
-
-## 第4步：最终输出
-- 输出格式：JSON 数组
-- 预期数量：50-100 个商户
-- 验证状态：全部标记为"待验证"
-
- [
-   {
-     "商户名称": "名称",
-     "验证地址": "地址",
-     "官方链接": "官方网站（待验证）" 或 "无官网",
-     "联系电话": "电话或 N/A",
-     "业务亮点": "描述",
-     "创始人": "创始人或 N/A",
-     "创始人 LinkedIn": "LinkedIn（待验证）" 或 "N/A",
-     "公司 LinkedIn": "LinkedIn（待验证）" 或 "N/A",
-     "电子邮箱": "邮箱（N/A）",
-     "已联系": false,
-     "验证状态": "全部待验证"
-   }
-   ...
- ]
-
-# Safety & Accuracy
-- 提供尽可能多的候选商户，让用户自行筛选和验证。
-- 所有信息必须来自你的内部知识库或网络搜索，不得编造信息。
-- 搜索结束时，请说明你找到了多少个商户。
-
-# Start Task
-目标城市：${city || '请指定城市'}
-目标商户类别：${category || '请指定商户类别'}
-${keyword ? `附加关键词：${keyword}` : ''}
-
-开始执行快速搜索模式。`;
-      
-    }
-    
-    const result = await model.generateContent(searchPrompt);
-    const responseText = result.response.text();
-    
-    let merchants;
-    try {
-      const jsonMatch = responseText.match(/\[[\s\S]*\]/);
-      const jsonStr = jsonMatch ? jsonMatch[0] : responseText;
-      merchants = JSON.parse(jsonStr);
-    } catch (e) {
-      merchants = [];
-    }
-
-    merchants = merchants.map(m => {
-      let verificationStatus = '全部待验证';
-      
-      if (mode === 'strict') {
-        verificationStatus = '已验证';
-      } else if (mode === 'balanced') {
-        const officialLink = m['官方链接'] || '';
-        const founderLinkedIn = m['创始人 LinkedIn'] || '';
-        const companyLinkedIn = m['公司 LinkedIn'] || '';
-        
-        const hasVerified = officialLink.includes('已验证') || 
-                          founderLinkedIn.includes('已验证') || 
-                          companyLinkedIn.includes('已验证');
-        
-        verificationStatus = hasVerified ? '部分已验证' : '全部待验证';
+        return res.json({
+          merchants: [],
+          source: 'gemini',
+          geminiRawResponse: responseText,
+          geminiUsed: true,
+          duration: `${duration}s`,
+          message: 'Results from Gemini API (JSON parsing required)'
+        });
+      } catch (error) {
+        console.error('Gemini API error:', error.message);
+        return res.status(500).json({
+          error: 'Gemini search failed',
+          details: error.message
+        });
       }
-      
-      return {
-        ...m,
-        已联系: m.已联系 || false,
-        创建时间: m.创建时间 || new Date().toISOString(),
-        验证状态: m.验证状态 || verificationStatus
-      };
+    }
+
+    // MD文件搜索（"数据库搜索"按钮）
+    if (mdData && mdData.allMerchants && mdData.allMerchants.length > 0) {
+      console.log(`MD search started: ${mdData.merchantCount} merchants, ${mdData.cityCount} cities`);
+      const mdResults = mdLoader.search({ city, category, keyword });
+      const duration = ((Date.now() - startTime) / 1000).toFixed(3);
+
+      console.log(`MD search completed: found ${mdResults.length} merchants, took ${duration}s`);
+
+      if (mdResults.length > 0) {
+        // 增强 LinkedIn 信息
+        const enhancedMerchants = await enhanceWithLinkedIn(mdResults);
+
+        const duration = ((Date.now() - startTime) / 1000).toFixed(3);
+        console.log(`LinkedIn enhancement completed, total time: ${duration}s`);
+
+        return res.json({
+          merchants: enhancedMerchants,
+          source: 'md',
+          mdCount: mdResults.length,
+          geminiUsed: false,
+          linkedinEnhanced: true,
+          duration: `${duration}s`,
+          message: `Found ${enhancedMerchants.length} merchants from MD files (with LinkedIn enhancement)`
+        });
+      }
+    }
+
+    // 所有搜索都未找到结果
+    const duration = ((Date.now() - startTime) / 1000).toFixed(3);
+    console.log(`No matching merchants found, took ${duration}s`);
+
+    return res.json({
+      merchants: [],
+      source: 'none',
+      mdCount: 0,
+      geminiUsed: false,
+      duration: `${duration}s`,
+      message: 'No matching merchants found. Try different search criteria or enable Gemini API search.'
     });
 
-    res.json({ merchants });
-    
   } catch (error) {
-    console.error('搜索错误:', error);
-    res.status(500).json({ error: '搜索失败，请重试' });
+    console.error('Search error:', error.message);
+    res.status(500).json({ error: 'Search failed, please retry', details: error.message });
   }
 });
 
 app.post('/api/generate-email', async (req, res) => {
   try {
-    const { merchant } = req.body;
+    const { merchant, userProfile } = req.body;
 
+    // 验证商户信息
     if (!merchant || !merchant['商户名称']) {
       return res.status(400).json({ error: '商户信息不完整' });
     }
 
-    const emailPrompt = `基于以下商家信息，起草一封合作邀请邮件：
+    // 验证用户资料（必填字段）
+    if (!userProfile || !userProfile['姓名'] || !userProfile['职位'] || !userProfile['邮箱']) {
+      return res.status(400).json({
+        error: '请先填写您的个人资料',
+        message: '请点击右上角"我的资料"按钮填写姓名、职位和邮箱信息'
+      });
+    }
 
-商户名称：${merchant['商户名称']}
-创始人：${merchant['创始人']}
-业务亮点：${merchant['业务亮点']}
-电子邮箱：${merchant['电子邮箱']}
-验证地址：${merchant['验证地址']}
-官方链接：${merchant['官方链接']}
+    console.log('Email generation request:', {
+      merchant: merchant['商户名称'],
+      user: userProfile['姓名']
+    });
 
-要求：
-1. 表达合作意图，希望能见面商谈
-2. 基于对方的业务亮点和特点，个性化定制内容
-3. 专业、简洁、礼貌的商务邮件格式
-4. 包含：主题行、称呼、正文、结尾、签名
+    // 构建动态 Prompt（不使用模板）
+    const merchantInfo = `
+Merchant Info:
+- Name: ${merchant['商户名称']}
+- Founder: ${merchant['创始人'] || 'N/A'}
+- Business: ${merchant['业务亮点'] || 'N/A'}
+- Email: ${merchant['电子邮箱'] || 'N/A'}
+- Address: ${merchant['验证地址'] || 'N/A'}
+- Phone: ${merchant['联系电话'] || 'N/A'}
+- Website: ${merchant['官方链接'] || 'N/A'}
+`;
 
-请以以下格式返回：
-主题：[邮件主题]
-称呼：[称呼]
-正文：
-[邮件正文内容]
-结尾：[结尾]
-签名：[签名]`;
+    const senderInfo = `
+Sender Info:
+- Name: ${userProfile['姓名']}
+- Title: ${userProfile['职位']}
+- Email: ${userProfile['邮箱']}
+- Phone: ${userProfile['电话'] || 'N/A'}
+- Company: ${userProfile['公司名称'] || 'N/A'}
+- Business: ${userProfile['公司业务'] || 'N/A'}
+- Website: ${userProfile['公司网址'] || 'N/A'}
+- Address: ${userProfile['公司地址'] || 'N/A'}
+`;
 
+    const emailPrompt = `${merchantInfo}
+${senderInfo}
+
+Please generate a personalized business partnership email based on the above information.
+
+Requirements:
+1. **Language Selection**: Automatically identify the appropriate language based on merchant address
+2. **Personalized Content**: Find potential cooperation points by combining merchant's business highlights and sender's company business
+3. **Cooperation Expectation**: Clearly express specific expectations and vision for cooperation
+4. **Invite Offline Meeting**: Propose inviting for coffee or meeting when appropriate for deeper communication
+5. **Open Attitude**: Express that even if we cannot reach cooperation, we hope to become friends and keep in touch
+6. **Professional and Sincere**: Use professional business tone while maintaining sincerity and friendliness
+7. **Avoid Fabrication**: Do not fabricate any non-existent information; skip content if field is N/A
+
+Email Format:
+Subject: [Subject]
+Salutation: [Salutation]
+Body: [Email Body Content]
+Closing: [Closing]
+Signature: [Signature]
+
+Please generate a sincere, professional, and personalized business email.`;
+
+    console.log(`Prompt built, length: ${emailPrompt.length}`);
+
+    // 调用 Gemini API
     const result = await model.generateContent(emailPrompt);
     const responseText = result.response.text();
-    
+    console.log(`Gemini 返回内容，长度: ${responseText.length}`);
+
+    const lines = responseText.split('\n');
     let email = {
       subject: '',
       salutation: '',
@@ -304,44 +300,287 @@ app.post('/api/generate-email', async (req, res) => {
       closing: '',
       signature: ''
     };
-
-    const lines = responseText.split('\n');
     let currentSection = '';
     let bodyLines = [];
+    let inSalutation = false;
+    let inSignature = false;
 
     lines.forEach(line => {
       const trimmedLine = line.trim();
-      
-      if (trimmedLine.startsWith('**主题：**') || trimmedLine.startsWith('主题：')) {
-        email.subject = trimmedLine.replace(/\*\*主题：\*\*|主题：/, '').trim();
-        currentSection = '';
-      } else if (trimmedLine.startsWith('**称呼：**') || trimmedLine.startsWith('称呼：')) {
-        email.salutation = trimmedLine.replace(/\*\*称呼：\*\*|称呼：/, '').trim();
-        currentSection = '';
-      } else if (trimmedLine.startsWith('**正文：**') || trimmedLine.startsWith('正文：')) {
-        currentSection = 'body';
-      } else if (trimmedLine.startsWith('**结尾：**') || trimmedLine.startsWith('结尾：')) {
-        email.closing = trimmedLine.replace(/\*\*结尾：\*\*|结尾：/, '').trim();
-        currentSection = '';
-      } else if (trimmedLine.startsWith('**签名：**') || trimmedLine.startsWith('签名：')) {
-        currentSection = 'signature';
-      } else if (currentSection === 'body' && trimmedLine && !trimmedLine.startsWith('**')) {
+
+      const fieldMatch = trimmedLine.match(/^(\*\*)?(主题|Subject|称呼|Salutation|正文|Body|结尾|Closing|签名|Signature)[：:]/);
+      if (fieldMatch) {
+        const field = fieldMatch[2];
+
+        if (field === '主题' || field === 'Subject') {
+          const valueMatch = trimmedLine.match(/(?:\*\*)?(?:主题|Subject)[：:]\s*(.*)/);
+          email.subject = valueMatch ? valueMatch[1].trim() : '';
+          currentSection = '';
+          inSalutation = false;
+          inSignature = false;
+        } else if (field === '称呼' || field === 'Salutation') {
+          const valueMatch = trimmedLine.match(/(?:\*\*)?(?:称呼|Salutation)[：:]\s*(.*)/);
+          if (valueMatch && valueMatch[1].trim()) {
+            email.salutation = valueMatch[1].trim();
+            inSalutation = false;
+          } else {
+            inSalutation = true;
+          }
+          currentSection = '';
+          inSignature = false;
+        } else if (field === '正文' || field === 'Body') {
+          currentSection = 'body';
+          inSalutation = false;
+          inSignature = false;
+        } else if (field === '结尾' || field === 'Closing') {
+          const valueMatch = trimmedLine.match(/(?:\*\*)?(?:结尾|Closing)[：:]\s*(.*)/);
+          email.closing = valueMatch ? valueMatch[1].trim() : '';
+          currentSection = '';
+          inSalutation = false;
+          inSignature = false;
+        } else if (field === '签名' || field === 'Signature') {
+          currentSection = '';
+          inSalutation = false;
+          inSignature = true;
+        }
+      } else if (inSalutation && trimmedLine) {
+        if (email.salutation) {
+          email.salutation += ' ' + trimmedLine;
+        } else {
+          email.salutation = trimmedLine;
+        }
+      } else if (currentSection === 'body' && trimmedLine && !trimmedLine.match(/^(主题|Subject|称呼|Salutation|正文|Body|结尾|Closing|签名|Signature)[：:]/i)) {
         bodyLines.push(line);
-      } else if (currentSection === 'signature' && trimmedLine) {
-        email.signature += trimmedLine + '\n';
+      } else if (inSignature && trimmedLine) {
+        if (email.signature) {
+          email.signature += '\n' + trimmedLine;
+        } else {
+          email.signature = trimmedLine;
+        }
       }
     });
 
     email.body = bodyLines.join('\n').trim();
     email.signature = email.signature.trim();
 
+    console.log('Email parsed successfully:', {
+      subject: email.subject,
+      bodyLength: email.body.length
+    });
+
     res.json({ email });
   } catch (error) {
-    console.error('邮件生成错误:', error);
-    res.status(500).json({ error: '邮件生成失败，请重试' });
+    console.error('Email generation error:', error.message);
+    res.status(500).json({ error: 'Email generation failed, please retry', details: error.message });
   }
 });
 
+// 用户资料保存接口
+app.post('/api/save-profile', (req, res) => {
+  try {
+    const profile = req.body;
+
+    // 验证必填字段
+    if (!profile['姓名'] || !profile['职位'] || !profile['邮箱']) {
+      return res.status(400).json({ error: '请填写姓名、职位和邮箱' });
+    }
+
+    // 确保目录存在
+    const dataDir = path.join(__dirname, 'data');
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+
+    // 保存到文件
+    const profilePath = path.join(dataDir, 'user-profile.json');
+    fs.writeFileSync(profilePath, JSON.stringify(profile, null, 2), 'utf-8');
+
+    console.log(`User profile saved: ${profile['姓名']}`);
+    res.json({ success: true, message: 'Profile saved successfully' });
+  } catch (error) {
+    console.error('Save user profile error:', error.message);
+    res.status(500).json({ error: 'Save failed, please retry' });
+  }
+});
+
+// 用户资料获取接口
+app.get('/api/get-profile', (req, res) => {
+  try {
+    const profilePath = path.join(__dirname, 'data', 'user-profile.json');
+
+    if (!fs.existsSync(profilePath)) {
+      return res.json({ profile: null });
+    }
+
+    const profileData = fs.readFileSync(profilePath, 'utf-8');
+    const profile = JSON.parse(profileData);
+
+    console.log(`User profile loaded: ${profile['姓名'] || 'Not set'}`);
+    res.json({ profile });
+  } catch (error) {
+    console.error('Load user profile error:', error.message);
+    res.status(500).json({ error: 'Load failed, please retry' });
+  }
+});
+
+// LinkedIn 搜索接口
+app.post('/api/search-linkedin', async (req, res) => {
+  try {
+    const { merchants } = req.body;
+
+    if (!Array.isArray(merchants) || merchants.length === 0) {
+      return res.status(400).json({
+        error: 'Please provide merchants array'
+      });
+    }
+
+    console.log(`LinkedIn search started for ${merchants.length} merchants`);
+
+    const startTime = Date.now();
+
+    // 批量搜索 LinkedIn
+    const results = await linkedinSearch.batchSearch(merchants, {
+      delay: 500, // 500ms 延迟避免 API 限制
+      onProgress: (completed, total) => {
+        console.log(`LinkedIn search progress: ${completed}/${total}`);
+      }
+    });
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log(`LinkedIn search completed in ${duration}s`);
+
+    res.json({
+      merchants: results,
+      duration: `${duration}s`,
+      message: `LinkedIn search completed for ${results.length} merchants`
+    });
+
+  } catch (error) {
+    console.error('LinkedIn search error:', error.message);
+    res.status(500).json({
+      error: 'LinkedIn search failed',
+      details: error.message
+    });
+  }
+});
+
+// LinkedIn 验证接口
+app.post('/api/validate-linkedin', async (req, res) => {
+  try {
+    const { merchants } = req.body;
+
+    if (!Array.isArray(merchants) || merchants.length === 0) {
+      return res.status(400).json({
+        error: 'Please provide merchants array'
+      });
+    }
+
+    console.log(`LinkedIn validation started for ${merchants.length} merchants`);
+
+    const results = merchants.map(merchant => {
+      const companyLinkedin = merchant['公司 LinkedIn'];
+      const founderLinkedin = merchant['创始人 LinkedIn'];
+
+      // 验证公司 LinkedIn
+      let companyValidation = { valid: false, type: null, url: companyLinkedin };
+      if (companyLinkedin && companyLinkedin !== 'N/A') {
+        companyValidation = linkedinSearch.validateLinkedInUrl(companyLinkedin);
+      }
+
+      // 验证创始人 LinkedIn
+      let founderValidation = { valid: false, type: null, url: founderLinkedin };
+      if (founderLinkedin && founderLinkedin !== 'N/A') {
+        founderValidation = linkedinSearch.validateLinkedInUrl(founderLinkedin);
+      }
+
+      return {
+        ...merchant,
+        '公司 LinkedIn验证': companyValidation,
+        '创始人 LinkedIn验证': founderValidation
+      };
+    });
+
+    console.log(`LinkedIn validation completed for ${results.length} merchants`);
+
+    res.json({
+      merchants: results,
+      message: `LinkedIn validation completed for ${results.length} merchants`
+    });
+
+  } catch (error) {
+    console.error('LinkedIn validation error:', error.message);
+    res.status(500).json({
+      error: 'LinkedIn validation failed',
+      details: error.message
+    });
+  }
+});
+
+// 辅助函数：检查 LinkedIn URL 是否有效
+function isValidLinkedInUrl(url) {
+  if (!url || url === 'N/A') return false;
+  const lowerUrl = url.toLowerCase();
+  return lowerUrl.includes('linkedin.com/');
+}
+
+// 辅助函数：增强商户的 LinkedIn 信息
+async function enhanceWithLinkedIn(merchants) {
+  if (!merchants || merchants.length === 0) {
+    return merchants;
+  }
+
+  // 只为没有有效 LinkedIn 的商户搜索
+  const needsSearch = merchants.filter(m =>
+    !isValidLinkedInUrl(m['公司 LinkedIn']) ||
+    !isValidLinkedInUrl(m['创始人 LinkedIn'])
+  );
+
+  if (needsSearch.length === 0) {
+    console.log('All merchants already have valid LinkedIn information');
+    return merchants;
+  }
+
+  console.log(`Enhancing ${needsSearch.length} merchants with LinkedIn data`);
+
+  try {
+    const enhancedMerchants = await linkedinSearch.batchSearch(needsSearch, {
+      delay: 500
+    });
+
+    // 创建查找映射
+    const enhancedMap = new Map(
+      enhancedMerchants.map(m => [m['商户名称'], m])
+    );
+
+    // 更新原商户数组
+    const result = merchants.map(merchant => {
+      const enhanced = enhancedMap.get(merchant['商户名称']);
+      if (enhanced) {
+        return {
+          ...merchant,
+          '公司 LinkedIn': enhanced['公司 LinkedIn'],
+          '公司 LinkedIn置信度': enhanced['公司 LinkedIn置信度'],
+          '创始人 LinkedIn': enhanced['创始人 LinkedIn'],
+          '创始人 LinkedIn置信度': enhanced['创始人 LinkedIn置信度'],
+          'LinkedIn来源': enhanced['LinkedIn来源'],
+          '验证状态': enhanced['验证状态']
+        };
+      }
+      return merchant;
+    });
+
+    return result;
+
+  } catch (error) {
+    console.error('LinkedIn enhancement failed:', error.message);
+    // 如果失败，返回原商户数据
+    return merchants;
+  }
+}
+
 app.listen(PORT, () => {
-  console.log(`服务器运行在 http://localhost:${PORT}`);
+  console.log('========================================');
+  console.log(`Server started`);
+  console.log(`Visit: http://localhost:${PORT}`);
+  console.log('========================================');
 });

@@ -3,12 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="version" content="2.1-fix">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>商户管理系统</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=2.1-fix">
+    <script src="script.js?v=2.1-fix"></script>
 </head>
 <body>
+    <!-- 顶部导航栏 -->
+    <nav class="top-nav">
+        <div class="nav-left">
+            <h1>商户管理系统</h1>
+        </div>
+        <div class="nav-right">
+            <button id="myProfileBtn" class="nav-btn">
+                <span class="nav-icon">📝</span>
+                <span class="nav-text">我的资料</span>
+            </button>
+        </div>
+    </nav>
+
     <div class="container">
-        <h1>商户管理系统</h1>
         
         <!-- 搜索区域 -->
         <div class="search-section">
@@ -57,8 +74,10 @@
                 </div>
             </div>
             <div class="search-actions">
-                <button id="searchBtn" class="btn btn-primary">搜索</button>
+                <button id="searchBtn" class="btn btn-primary">数据库搜索</button>
                 <button id="searchAgainBtn" class="btn btn-primary">再搜索</button>
+                <button id="addMerchantBtn" class="btn btn-info">添加商户</button>
+                <button id="importExcelBtn" class="btn btn-warning">📊 导入 Excel</button>
                 <button id="saveBtn" class="btn btn-success">保存数据</button>
             </div>
         </div>
@@ -128,6 +147,217 @@
                     <button id="closeBtn" class="btn btn-ghost">关闭</button>
                     <button id="copyBtn" class="btn btn-primary">复制邮件</button>
                 </div>
+            </div>
+        </div>
+
+        <!-- 商户添加弹窗 + 遮罩层 -->
+        <div id="addMerchantOverlay" class="modal-overlay hidden">
+            <div class="modal-content add-merchant-modal">
+                <h2>添加商户</h2>
+                <div class="merchant-form">
+                    <div class="form-group">
+                        <label for="merchantName">商户名称 <span class="required">*</span></label>
+                        <input type="text" id="merchantName" class="form-input" placeholder="请输入商户名称">
+                    </div>
+                    <div class="form-group">
+                        <label for="merchantAddress">验证地址 <span class="required">*</span></label>
+                        <input type="text" id="merchantAddress" class="form-input" placeholder="请输入商户地址">
+                    </div>
+                    <div class="form-group">
+                        <label for="merchantPhone">联系电话</label>
+                        <input type="text" id="merchantPhone" class="form-input" placeholder="请输入联系电话">
+                    </div>
+                    <div class="form-group">
+                        <label for="merchantEmail">电子邮箱 <span class="required">*</span></label>
+                        <input type="email" id="merchantEmail" class="form-input" placeholder="请输入电子邮箱">
+                    </div>
+                    <div class="form-group">
+                        <label for="merchantWebsite">官方链接</label>
+                        <input type="text" id="merchantWebsite" class="form-input" placeholder="请输入官网地址">
+                    </div>
+                    <div class="form-group">
+                        <label for="merchantFounder">创始人</label>
+                        <input type="text" id="merchantFounder" class="form-input" placeholder="请输入创始人姓名">
+                    </div>
+                    <div class="form-group">
+                        <label for="merchantHighlights">业务亮点</label>
+                        <textarea id="merchantHighlights" class="form-textarea" rows="3" placeholder="请输入商户业务亮点"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="merchantFounderLinkedin">创始人 LinkedIn</label>
+                        <input type="text" id="merchantFounderLinkedin" class="form-input" placeholder="请输入创始人LinkedIn链接">
+                    </div>
+                    <div class="form-group">
+                        <label for="merchantCompanyLinkedin">公司 LinkedIn</label>
+                        <input type="text" id="merchantCompanyLinkedin" class="form-input" placeholder="请输入公司LinkedIn链接">
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button id="cancelAddMerchantBtn" class="btn btn-ghost">取消</button>
+                    <button id="submitAddMerchantBtn" class="btn btn-primary">添加</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 用户资料弹窗 + 遮罩层 -->
+    <div id="profileOverlay" class="modal-overlay hidden">
+        <div class="modal-content profile-modal">
+            <div class="profile-header">
+                <h2>我的资料</h2>
+                <p class="profile-subtitle">填写您的个人和公司信息，生成邮件时自动使用</p>
+            </div>
+
+            <div class="profile-form">
+                <!-- 个人信息 -->
+                <div class="form-section">
+                    <h3>👤 个人信息</h3>
+                    <div class="form-group">
+                        <label for="userName">姓名 <span class="required">*</span></label>
+                        <input type="text" id="userName" class="form-input" placeholder="请输入您的姓名">
+                    </div>
+                    <div class="form-group">
+                        <label for="userTitle">职位 <span class="required">*</span></label>
+                        <input type="text" id="userTitle" class="form-input" placeholder="请输入您的职位">
+                    </div>
+                    <div class="form-group">
+                        <label for="userEmail">邮箱 <span class="required">*</span></label>
+                        <input type="email" id="userEmail" class="form-input" placeholder="请输入您的邮箱">
+                    </div>
+                    <div class="form-group">
+                        <label for="userPhone">电话</label>
+                        <input type="text" id="userPhone" class="form-input" placeholder="请输入您的电话（选填）">
+                    </div>
+                </div>
+
+                <!-- 公司信息 -->
+                <div class="form-section">
+                    <h3>🏢 公司信息</h3>
+                    <div class="form-group">
+                        <label for="companyName">公司名称 <span class="required">*</span></label>
+                        <input type="text" id="companyName" class="form-input" placeholder="请输入公司名称">
+                    </div>
+                    <div class="form-group">
+                        <label for="companyBusiness">公司业务</label>
+                        <textarea id="companyBusiness" class="form-textarea" rows="3"
+                                  placeholder="请描述您的公司主要业务或服务（选填）"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="companyWebsite">公司网址</label>
+                        <input type="text" id="companyWebsite" class="form-input"
+                               placeholder="请输入公司网址（选填）">
+                    </div>
+                    <div class="form-group">
+                        <label for="companyAddress">公司地址</label>
+                        <input type="text" id="companyAddress" class="form-input"
+                               placeholder="请输入公司地址（选填）">
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button id="cancelProfileBtn" class="btn btn-ghost">取消</button>
+                <button id="saveProfileBtn" class="btn btn-primary">保存资料</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Excel 导入弹窗 + 遮罩层 -->
+    <div id="importExcelOverlay" class="modal-overlay hidden">
+        <div class="modal-content import-modal">
+            <div class="import-header">
+                <h2>📊 导入 Excel 数据</h2>
+                <p class="import-subtitle">支持批量导入多个 Excel 文件，系统会自动识别并映射字段</p>
+            </div>
+
+            <div class="import-section">
+                <div class="upload-area" id="uploadArea">
+                    <input type="file" id="excelFileInput" accept=".xlsx,.xls" style="display: none;" multiple>
+                    <div class="upload-content">
+                        <div class="upload-icon">📁</div>
+                        <h3>拖拽文件到这里</h3>
+                        <p>或者</p>
+                        <button id="selectFileBtn" class="btn btn-primary">选择文件</button>
+                        <p class="upload-hint">支持 .xlsx 和 .xls 格式，可多选</p>
+                    </div>
+                </div>
+
+                <div id="fileList" class="file-list hidden">
+                    <div class="file-list-header">
+                        <h3>已选择的文件</h3>
+                        <button id="clearFileListBtn" class="btn btn-ghost btn-sm">清空</button>
+                    </div>
+                    <div id="fileListItems"></div>
+                </div>
+
+                <div id="importProgress" class="import-progress hidden">
+                    <div class="progress-label">正在导入...</div>
+                    <div class="progress-bar">
+                        <div id="importProgressBar" class="progress-fill"></div>
+                    </div>
+                    <div id="importProgressText" class="progress-text">0%</div>
+                </div>
+            </div>
+
+            <div class="import-info">
+                <h3>📋 支持的字段映射</h3>
+                <div class="mapping-table">
+                    <div class="mapping-row">
+                        <span class="mapping-label">Excel 列名</span>
+                        <span class="mapping-arrow">→</span>
+                        <span class="mapping-value">系统字段</span>
+                    </div>
+                    <div class="mapping-row">
+                        <span>商户名称 / 公司名称 / 名称 / Name</span>
+                        <span>→</span>
+                        <span>商户名称</span>
+                    </div>
+                    <div class="mapping-row">
+                        <span>地址 / Address</span>
+                        <span>→</span>
+                        <span>验证地址</span>
+                    </div>
+                    <div class="mapping-row">
+                        <span>国家 / Country</span>
+                        <span>→</span>
+                        <span>地址前缀</span>
+                    </div>
+                    <div class="mapping-row">
+                        <span>联系电话 / 电话 / 联系方式 / Phone / Tel</span>
+                        <span>→</span>
+                        <span>联系电话</span>
+                    </div>
+                    <div class="mapping-row">
+                        <span>电子邮箱 / 邮箱 / Email</span>
+                        <span>→</span>
+                        <span>电子邮箱</span>
+                    </div>
+                    <div class="mapping-row">
+                        <span>官方网站 / 网站 / Website</span>
+                        <span>→</span>
+                        <span>官方链接</span>
+                    </div>
+                    <div class="mapping-row">
+                        <span>联系人 / 创始人 / Contact Person</span>
+                        <span>→</span>
+                        <span>创始人</span>
+                    </div>
+                    <div class="mapping-row">
+                        <span>业务亮点 / 采购需求 / Description</span>
+                        <span>→</span>
+                        <span>业务亮点</span>
+                    </div>
+                    <div class="mapping-row">
+                        <span>其他信息 / 备注 / Remarks</span>
+                        <span>→</span>
+                        <span>追加到业务亮点</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button id="cancelImportBtn" class="btn btn-ghost">取消</button>
+                <button id="importBtn" class="btn btn-primary" disabled>开始导入</button>
             </div>
         </div>
     </div>
